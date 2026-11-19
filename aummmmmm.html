@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Animal Farming</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #1d2a14;
+  }
+
+  /* เวทีขนาดอ้างอิง 1920x1080 จะถูกซูมให้เต็มจอ (cover) ด้วย JS */
+  #stage {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 1920px;
+    height: 1080px;
+    transform-origin: center center;
+    transform: translate(-50%, -50%) scale(1);
+    background: url("2.png") center / 100% 100% no-repeat;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* ตัวเลขในกล่องสีเทา (กล่องอยู่ในภาพพื้นหลังแล้ว) */
+  .num {
+    position: absolute;
+    top: 362px;
+    width: 264px;
+    height: 200px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: "Montserrat", "Arial", "Helvetica", sans-serif;
+    font-weight: 700;
+    font-size: 68px;
+    color: #fff;
+    padding-top: 8px;
+  }
+  #n1 { left: 410px; }
+  #n2 { left: 783px; padding-top: 0; padding-bottom: 6px; }
+  #n3 { left: 1156px; }
+
+  /* ปุ่ม toggle */
+  .toggle {
+    position: absolute;
+    top: 597px;
+    width: 243px;
+    height: 105px;
+    border-radius: 53px;
+    background: #3b5a15;
+    cursor: pointer;
+    touch-action: none;
+    transition: background .25s;
+  }
+  .toggle.on { background: #5c9a1f; }
+  #t1 { left: 410px; }
+  #t2 { left: 785px; }
+  #t3 { left: 1156px; }
+
+  .knob {
+    position: absolute;
+    top: 2px;
+    left: 0;
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    background: #6b6a3a;
+    transition: left .25s ease, background .25s;
+  }
+  .toggle.on .knob { background: #d9d27a; }
+  .toggle.dragging, .toggle.dragging .knob { transition: none; }
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <div class="num" id="n1">25</div>
+  <div class="num" id="n2">150</div>
+  <div class="num" id="n3">1</div>
+
+  <div class="toggle" id="t1" data-target="n1" data-min="1"  data-max="100"><div class="knob"></div></div>
+  <div class="toggle" id="t2" data-target="n2" data-min="50" data-max="500"><div class="knob"></div></div>
+  <div class="toggle" id="t3" data-target="n3" data-min="1"  data-max="15"><div class="knob"></div></div>
+</div>
+
+<script>
+  /* ---------- ปรับเวทีให้เต็มจอ (cover) ---------- */
+  const stage = document.getElementById('stage');
+  function fit() {
+    const s = Math.max(innerWidth / 1920, innerHeight / 1080);
+    stage.style.transform = `translate(-50%, -50%) scale(${s})`;
+  }
+  addEventListener('resize', fit);
+  fit();
+
+  /* ---------- สุ่มตัวเลข ---------- */
+  const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+
+  function rollNumber(toggle) {
+    const el  = document.getElementById(toggle.dataset.target);
+    const min = +toggle.dataset.min, max = +toggle.dataset.max;
+    let n = 0;
+    const timer = setInterval(() => {         // เอฟเฟกต์เลขวิ่งสั้น ๆ
+      el.textContent = rand(min, max);
+      if (++n >= 8) clearInterval(timer);
+    }, 40);
+  }
+
+  // สุ่มค่าเริ่มต้นตอนโหลดหน้า
+  document.querySelectorAll('.toggle').forEach(t => {
+    document.getElementById(t.dataset.target).textContent =
+      rand(+t.dataset.min, +t.dataset.max);
+  });
+
+  /* ---------- toggle: กดได้ และลากได้ ---------- */
+  const KNOB = 100, PAD = 2;
+
+  document.querySelectorAll('.toggle').forEach(toggle => {
+    const knob = toggle.querySelector('.knob');
+    const travel = () => toggle.offsetWidth - KNOB - PAD * 2;
+    let state = false, dragging = false, moved = false, startX = 0, startLeft = 0;
+
+    function setState(on, silent) {
+      const changed = on !== state;
+      state = on;
+      toggle.classList.toggle('on', on);
+      knob.style.left = (on ? travel() + PAD : 0) + 'px';
+      if (changed && !silent) rollNumber(toggle);   // เปลี่ยนสถานะ = สุ่มเลขใหม่
+    }
+
+    toggle.addEventListener('pointerdown', e => {
+      dragging = true; moved = false;
+      startX = e.clientX;
+      startLeft = knob.offsetLeft;
+      toggle.classList.add('dragging');
+      toggle.setPointerCapture(e.pointerId);
+    });
+
+    toggle.addEventListener('pointermove', e => {
+      if (!dragging) return;
+      const scale = stage.getBoundingClientRect().width / 1920;
+      const dx = (e.clientX - startX) / scale;
+      if (Math.abs(dx) > 4) moved = true;
+      const left = Math.min(travel() + PAD, Math.max(0, startLeft + dx));
+      knob.style.left = left + 'px';
+    });
+
+    toggle.addEventListener('pointerup', () => {
+      if (!dragging) return;
+      dragging = false;
+      toggle.classList.remove('dragging');
+      if (moved) {
+        setState(knob.offsetLeft > (travel() + PAD) / 2);   // ลากแล้วปล่อย: ดูตำแหน่ง
+      } else {
+        setState(!state);                                    // คลิก: สลับ
+      }
+    });
+
+    toggle.addEventListener('pointercancel', () => {
+      dragging = false;
+      toggle.classList.remove('dragging');
+      setState(state, true);
+    });
+  });
+</script>
+</body>
+</html>
